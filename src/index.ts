@@ -16,7 +16,6 @@ async function main() {
     process.exit(1);
   }
 
-  console.log("Day 1 setup verified successfully.");
   await closePool();
 }
 
