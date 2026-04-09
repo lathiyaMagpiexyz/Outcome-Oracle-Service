@@ -53,6 +53,43 @@ export interface OutcomeResult {
   markPx: number | null;
 }
 
+// Hyperliquid /info responses
+
+export type AllMidsResponse = Record<string, string>;
+
+export interface AssetPosition {
+  type: string;
+  position: {
+    coin: string;
+    szi: string;
+    entryPx: string | null;
+    positionValue: string;
+    unrealizedPnl: string;
+    returnOnEquity: string;
+    leverage: { type: string; value: number };
+    liquidationPx: string | null;
+    marginUsed: string;
+    maxLeverage: number;
+    cumFunding: { allTime: string; sinceOpen: string; sinceChange: string };
+  };
+}
+
+export interface MarginSummary {
+  accountValue: string;
+  totalNtlPos: string;
+  totalRawUsd: string;
+  totalMarginUsed: string;
+}
+
+export interface UserStateResponse {
+  marginSummary: MarginSummary;
+  crossMarginSummary: MarginSummary;
+  crossMaintenanceMarginUsed: string;
+  withdrawable: string;
+  assetPositions: AssetPosition[];
+  time: number;
+}
+
 export interface OutcomeRecord {
   id: string;                  // e.g. "@3310"
   name: string;                // outcome name

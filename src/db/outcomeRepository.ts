@@ -1,6 +1,15 @@
 import { query } from './pgClient';
 import { OutcomeRecord, OutcomeResultValue, MarketType } from '../types';
 
+type OutcomeRow = Omit<OutcomeRecord, 'rawMeta'> & { rawMeta: string | null };
+
+function mapRow(row: OutcomeRow): OutcomeRecord {
+  return {
+    ...row,
+    rawMeta: row.rawMeta ? JSON.parse(row.rawMeta) : {},
+  };
+}
+
 export interface OutcomeInsert {
   id: string;
   name: string;
@@ -90,11 +99,8 @@ export async function getTodayOutcomes(): Promise<OutcomeRecord[]> {
     WHERE DATE(start_time) = CURRENT_DATE
     ORDER BY start_time DESC
   `;
-  const result = await query(sql);
-  return result.rows.map(row => ({
-    ...row,
-    rawMeta: row.rawMeta ? JSON.parse(row.rawMeta) : {},
-  }));
+  const result = await query<OutcomeRow>(sql);
+  return result.rows.map(mapRow);
 }
 
 export async function getActiveOutcomes(): Promise<OutcomeRecord[]> {
@@ -107,11 +113,8 @@ export async function getActiveOutcomes(): Promise<OutcomeRecord[]> {
     WHERE result IS NULL
     ORDER BY start_time DESC
   `;
-  const result = await query(sql);
-  return result.rows.map(row => ({
-    ...row,
-    rawMeta: row.rawMeta ? JSON.parse(row.rawMeta) : {},
-  }));
+  const result = await query<OutcomeRow>(sql);
+  return result.rows.map(mapRow);
 }
 
 export async function getOutcomeById(id: string): Promise<OutcomeRecord | null> {
@@ -123,13 +126,9 @@ export async function getOutcomeById(id: string): Promise<OutcomeRecord | null> 
     FROM outcomes
     WHERE id = $1
   `;
-  const result = await query(sql, [id]);
+  const result = await query<OutcomeRow>(sql, [id]);
   if (result.rows.length === 0) return null;
-  const row = result.rows[0];
-  return {
-    ...row,
-    rawMeta: row.rawMeta ? JSON.parse(row.rawMeta) : {},
-  };
+  return mapRow(result.rows[0]);
 }
 
 export async function getHistoryByDays(days: number): Promise<OutcomeRecord[]> {
@@ -144,9 +143,6 @@ export async function getHistoryByDays(days: number): Promise<OutcomeRecord[]> {
       AND settled_at >= NOW() - INTERVAL '${cappedDays} days'
     ORDER BY settled_at DESC
   `;
-  const result = await query(sql);
-  return result.rows.map(row => ({
-    ...row,
-    rawMeta: row.rawMeta ? JSON.parse(row.rawMeta) : {},
-  }));
+  const result = await query<OutcomeRow>(sql);
+  return result.rows.map(mapRow);
 }
