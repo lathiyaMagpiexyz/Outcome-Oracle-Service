@@ -2,6 +2,7 @@ import { getApiUrl } from "../config";
 import {
   AllMidsResponse,
   OutcomeMetaResponse,
+  UserFill,
   UserStateResponse,
 } from "../types";
 
@@ -115,4 +116,24 @@ export function fetchUserState(user: string): Promise<UserStateResponse> {
     type: "clearinghouseState",
     user: user.toLowerCase(),
   });
+}
+
+/**
+ * Fetches fills for a user within a time range.
+ * Used to check settlement fills on the sentinel wallet.
+ */
+export function fetchUserFillsByTime(
+  user: string,
+  startTime: number,
+  endTime?: number
+): Promise<UserFill[]> {
+  const body: Record<string, unknown> = {
+    type: "userFillsByTime",
+    user: user.toLowerCase(),
+    startTime,
+  };
+  if (endTime !== undefined) {
+    body.endTime = endTime;
+  }
+  return postInfo<UserFill[]>(body);
 }

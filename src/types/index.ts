@@ -90,6 +90,12 @@ export interface UserStateResponse {
   time: number;
 }
 
+export interface UserFillsByTimeRequest {
+  user: string;
+  startTime: number; // epoch ms
+  endTime?: number;  // epoch ms, optional
+}
+
 export interface OutcomeRecord {
   id: string;                  // e.g. "@3310"
   name: string;                // outcome name

@@ -1,1 +1,6 @@
-export { fetchOutcomeMeta, fetchAllMids, fetchUserState } from "./client";
+export {
+  fetchOutcomeMeta,
+  fetchAllMids,
+  fetchUserState,
+  fetchUserFillsByTime,
+} from "./client";

@@ -1,13 +1,18 @@
 import { query } from './pgClient';
 import { OutcomeRecord, OutcomeResultValue, MarketType } from '../types';
 
-type OutcomeRow = Omit<OutcomeRecord, 'rawMeta'> & { rawMeta: string | null };
+type OutcomeRow = Omit<OutcomeRecord, 'rawMeta'> & { rawMeta: Record<string, unknown> | string | null };
 
 function mapRow(row: OutcomeRow): OutcomeRecord {
-  return {
-    ...row,
-    rawMeta: row.rawMeta ? JSON.parse(row.rawMeta) : {},
-  };
+  let rawMeta: Record<string, unknown>;
+  if (!row.rawMeta) {
+    rawMeta = {};
+  } else if (typeof row.rawMeta === "string") {
+    rawMeta = JSON.parse(row.rawMeta);
+  } else {
+    rawMeta = row.rawMeta;
+  }
+  return { ...row, rawMeta };
 }
 
 export interface OutcomeInsert {
