@@ -43,6 +43,9 @@ export const config = {
   polling: {
     intervalMs: parseInt(optional("POLL_INTERVAL_MS", "30000"), 10),
   },
+  api: {
+    port: parseInt(optional("API_PORT", "3000"), 10),
+  },
 };
 
 export function getApiUrl(): string {

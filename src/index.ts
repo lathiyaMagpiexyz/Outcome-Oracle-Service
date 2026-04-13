@@ -1,4 +1,5 @@
 import { config, getApiUrl } from "./config";
+import { startApi } from "./api";
 import { testConnection, closePool } from "./db/pgClient";
 import { initSentinel, disconnectSentinel } from "./sentinel";
 import { startWatcher, stopWatcher } from "./watcher";
@@ -19,6 +20,7 @@ async function main() {
   }
 
   await initSentinel();
+  await startApi();
   startWatcher();
 
   // Graceful shutdown
