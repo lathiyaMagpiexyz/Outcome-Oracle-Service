@@ -9,6 +9,7 @@ import {
   updateOutcome,
   getActiveOutcomes,
 } from "../db/outcomeRepository";
+import { buyForNewOutcome } from "../sentinel";
 import {
   QuestionMetaItem,
   OutcomeResultValue,
@@ -147,6 +148,11 @@ export async function poll(): Promise<{
 
       newCount++;
       console.log(`[watcher] new outcome: ${outcomeCoin(o.outcome)} "${o.name}" (${marketType})`);
+
+      // Sentinel: buy 1 contract so we can read settlement fills later
+      buyForNewOutcome(o.outcome, mids).catch((err) => {
+        console.error(`[watcher] sentinel buy failed for ${outcomeCoin(o.outcome)}:`, (err as Error).message);
+      });
     }
   }
 

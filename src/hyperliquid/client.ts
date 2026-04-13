@@ -94,6 +94,23 @@ async function postInfo<T>(
     : new Error("Hyperliquid API request failed");
 }
 
+export interface UniverseAsset {
+  name: string;
+  szDecimals: number;
+  maxLeverage: number;
+}
+
+export interface MetaResponse {
+  universe: UniverseAsset[];
+}
+
+/**
+ * Fetches perp trading universe (used for asset index lookups).
+ */
+export function fetchMeta(): Promise<MetaResponse> {
+  return postInfo<MetaResponse>({ type: "meta" });
+}
+
 /**
  * Fetches all active outcome and question metadata for HIP-4 markets.
  */

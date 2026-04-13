@@ -36,6 +36,8 @@ export const config = {
       "HYPERLIQUID_TESTNET_API_URL",
       "https://api.hyperliquid-testnet.xyz/info"
     ),
+    mainnetExchangeUrl: "https://api.hyperliquid.xyz/exchange",
+    testnetExchangeUrl: "https://api.hyperliquid-testnet.xyz/exchange",
     useTestnet: optional("USE_TESTNET", "true") === "true",
   },
   polling: {
@@ -47,4 +49,10 @@ export function getApiUrl(): string {
   return config.hyperliquid.useTestnet
     ? config.hyperliquid.testnetUrl
     : config.hyperliquid.mainnetUrl;
+}
+
+export function getExchangeUrl(): string {
+  return config.hyperliquid.useTestnet
+    ? config.hyperliquid.testnetExchangeUrl
+    : config.hyperliquid.mainnetExchangeUrl;
 }
