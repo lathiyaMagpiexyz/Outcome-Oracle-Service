@@ -8,6 +8,7 @@ import {
   insertOutcome,
   updateOutcome,
   getActiveOutcomes,
+  getOutcomeById,
 } from "../db/outcomeRepository";
 import { buyForNewOutcome } from "../sentinel";
 import {
@@ -53,6 +54,40 @@ function parseNameParts(name: string): {
     };
   }
   return { underlying: null, target: null };
+}
+
+/**
+ * Parse Recurring outcome description for underlying, target, and expiry.
+ * Format: "class:priceBinary|underlying:BTC|expiry:20260414-0300|targetPrice:71238|period:1d"
+ */
+function parseDescription(description: string): {
+  underlying: string | null;
+  target: number | null;
+  expiry: Date | null;
+} {
+  const fields = new Map<string, string>();
+  for (const part of description.split("|")) {
+    const idx = part.indexOf(":");
+    if (idx > 0) {
+      fields.set(part.slice(0, idx), part.slice(idx + 1));
+    }
+  }
+
+  const underlying = fields.get("underlying") ?? null;
+  const targetStr = fields.get("targetPrice");
+  const target = targetStr ? parseFloat(targetStr) : null;
+
+  let expiry: Date | null = null;
+  const expiryStr = fields.get("expiry");
+  if (expiryStr) {
+    // "20260414-0300" → 2026-04-14T03:00:00Z
+    const match = expiryStr.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})$/);
+    if (match) {
+      expiry = new Date(`${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:00Z`);
+    }
+  }
+
+  return { underlying, target, expiry };
 }
 
 // ── Settlement result determination ──
@@ -109,6 +144,23 @@ async function determineResult(
     return { result: mid >= 0.5 ? "WINNER" : "LOSER", markPx: mid };
   }
 
+  // Fallback: check underlying asset price vs target from DB record
+  const dbRecord = await getOutcomeById(coin);
+  if (dbRecord?.underlying && dbRecord?.target) {
+    const underlyingMid = mids[dbRecord.underlying];
+    if (underlyingMid) {
+      const currentPrice = parseFloat(underlyingMid);
+      const won = currentPrice >= dbRecord.target;
+      const result: OutcomeResultValue = marketType === "binary"
+        ? (won ? "YES" : "NO")
+        : (won ? "WINNER" : "LOSER");
+      console.log(
+        `[watcher] ${coin} result from underlying: ${dbRecord.underlying}=$${currentPrice} vs target=$${dbRecord.target} → ${result}`
+      );
+      return { result, markPx: currentPrice };
+    }
+  }
+
   // No data at all — outcome vanished without price info
   console.warn(`[watcher] no price data for ${coin}, result unknown`);
   return { result: null, markPx: null };
@@ -129,7 +181,17 @@ export async function poll(): Promise<{
   // ── 1. Detect NEW outcomes → insert into DB ──
   for (const o of meta.outcomes) {
     if (!knownOutcomeIds.has(o.outcome)) {
-      const { underlying, target } = parseNameParts(o.name);
+      let { underlying, target } = parseNameParts(o.name);
+      let expiry: Date | null = null;
+
+      // Recurring outcomes have details in the description
+      if (o.name === "Recurring" && o.description) {
+        const parsed = parseDescription(o.description);
+        underlying = parsed.underlying ?? underlying;
+        target = parsed.target ?? target;
+        expiry = parsed.expiry;
+      }
+
       const { marketType, questionId } = parseMarketType(
         o.outcome,
         meta.questions
@@ -140,6 +202,7 @@ export async function poll(): Promise<{
         name: o.name,
         underlying,
         target,
+        expiry,
         startTime: new Date(),
         marketType,
         questionId,
