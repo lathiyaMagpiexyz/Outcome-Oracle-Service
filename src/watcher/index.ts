@@ -237,7 +237,7 @@ export async function poll(): Promise<{
           mids
         );
 
-        await updateOutcome(coin, {
+        const rowsUpdated = await updateOutcome(coin, {
           result,
           settledAt: new Date(),
           markPx,
@@ -245,7 +245,7 @@ export async function poll(): Promise<{
 
         settledCount++;
         console.log(
-          `[watcher] settled: ${coin} → ${result ?? "UNKNOWN"} (markPx=${markPx})`
+          `[watcher] settled: ${coin} → ${result ?? "UNKNOWN"} (markPx=${markPx}) [${rowsUpdated} row(s) updated]`
         );
       }
     }
@@ -261,7 +261,7 @@ export async function poll(): Promise<{
           mids
         );
 
-        await updateOutcome(record.id, {
+        const rowsUpdated = await updateOutcome(record.id, {
           result,
           settledAt: new Date(),
           markPx,
@@ -269,7 +269,7 @@ export async function poll(): Promise<{
 
         settledCount++;
         console.log(
-          `[watcher] settled (startup sync): ${record.id} → ${result ?? "UNKNOWN"}`
+          `[watcher] settled (startup sync): ${record.id} → ${result ?? "UNKNOWN"} [${rowsUpdated} row(s)]`
         );
       }
     }

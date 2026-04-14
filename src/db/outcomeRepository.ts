@@ -62,7 +62,7 @@ export async function insertOutcome(outcome: OutcomeInsert): Promise<void> {
   await query(sql, values);
 }
 
-export async function updateOutcome(id: string, updates: OutcomeUpdate): Promise<void> {
+export async function updateOutcome(id: string, updates: OutcomeUpdate): Promise<number> {
   const fields: string[] = [];
   const values: unknown[] = [];
   let paramIndex = 1;
@@ -84,14 +84,15 @@ export async function updateOutcome(id: string, updates: OutcomeUpdate): Promise
     values.push(JSON.stringify(updates.rawMeta));
   }
 
-  if (fields.length === 0) return;
+  if (fields.length === 0) return 0;
 
   fields.push(`updated_at = NOW()`);
 
   const sql = `UPDATE outcomes SET ${fields.join(', ')} WHERE id = $${paramIndex}`;
   values.push(id);
 
-  await query(sql, values);
+  const result = await query(sql, values);
+  return result.rowCount ?? 0;
 }
 
 export async function getTodayOutcomes(): Promise<OutcomeRecord[]> {
