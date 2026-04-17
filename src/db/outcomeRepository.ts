@@ -52,10 +52,10 @@ export async function insertOutcome(outcome: OutcomeInsert): Promise<void> {
     outcome.target,
     outcome.startTime,
     outcome.expiry,
-    outcome.result || null,
-    outcome.settledAt || null,
-    outcome.markPx || null,
-    outcome.questionId || null,
+    outcome.result ?? null,
+    outcome.settledAt ?? null,
+    outcome.markPx ?? null,
+    outcome.questionId ?? null,
     outcome.marketType,
     outcome.rawMeta ? JSON.stringify(outcome.rawMeta) : null,
   ];
@@ -146,9 +146,9 @@ export async function getHistoryByDays(days: number): Promise<OutcomeRecord[]> {
       question_id as "questionId", market_type as "marketType", raw_meta as "rawMeta"
     FROM outcomes
     WHERE result IS NOT NULL
-      AND settled_at >= NOW() - INTERVAL '${cappedDays} days'
+      AND settled_at >= NOW() - ($1 * INTERVAL '1 day')
     ORDER BY settled_at DESC
   `;
-  const result = await query<OutcomeRow>(sql);
+  const result = await query<OutcomeRow>(sql, [cappedDays]);
   return result.rows.map(mapRow);
 }

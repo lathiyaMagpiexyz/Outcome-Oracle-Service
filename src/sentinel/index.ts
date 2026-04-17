@@ -123,15 +123,26 @@ async function signL1Action(
 
 // ── Exchange POST ──
 
+const EXCHANGE_TIMEOUT_MS = 15000;
+
 async function postExchange(action: unknown): Promise<Record<string, unknown>> {
   const nonce = Date.now();
   const signature = await signL1Action(action, nonce);
 
-  const resp = await fetch(getExchangeUrl(), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, nonce, signature, vaultAddress: null }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), EXCHANGE_TIMEOUT_MS);
+
+  let resp: Response;
+  try {
+    resp = await fetch(getExchangeUrl(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, nonce, signature, vaultAddress: null }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
@@ -155,6 +166,10 @@ async function buyOneContract(
   }
 
   const midPx = parseFloat(midStr);
+  if (midPx <= 0) {
+    console.warn(`[sentinel] mid price for ${coin} is ${midPx}, skipping buy`);
+    return false;
+  }
   const limitPx = midPx * (1 + SLIPPAGE);
 
   // Calculate size to meet minimum $10 order value, with buffer
@@ -193,10 +208,20 @@ async function buyOneContract(
       return true;
     } else if (status?.resting) {
       const resting = status.resting as { oid: number };
-      console.log(
-        `[sentinel] order resting for ${coin} (oid=${resting.oid})`
+      console.warn(
+        `[sentinel] IOC order unexpectedly resting for ${coin} (oid=${resting.oid}), cancelling`
       );
-      return true;
+      // Cancel the resting order — IOC should never rest
+      try {
+        await postExchange({
+          type: "cancel",
+          cancels: [{ a: assetIdx, o: resting.oid }],
+        });
+        console.log(`[sentinel] cancelled resting order ${resting.oid} for ${coin}`);
+      } catch (cancelErr) {
+        console.error(`[sentinel] failed to cancel resting order ${resting.oid}:`, (cancelErr as Error).message);
+      }
+      return false;
     } else if (status?.error) {
       console.warn(`[sentinel] buy ${coin} rejected: ${status.error}`);
       return false;
@@ -221,8 +246,8 @@ async function buyOneContract(
 export async function buyForNewOutcome(
   outcomeId: number,
   mids: Record<string, string>
-): Promise<void> {
-  await buyOneContract(outcomeId, mids);
+): Promise<boolean> {
+  return buyOneContract(outcomeId, mids);
 }
 
 export async function buyForNewQuestion(

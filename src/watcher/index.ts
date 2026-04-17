@@ -8,20 +8,22 @@ import {
   insertOutcome,
   updateOutcome,
   getActiveOutcomes,
-  getOutcomeById,
 } from "../db/outcomeRepository";
 import { buyForNewOutcome } from "../sentinel";
 import {
   QuestionMetaItem,
   OutcomeResultValue,
   MarketType,
-  AllMidsResponse,
 } from "../types";
 
-// ── In-memory set of outcome IDs seen in the last poll ──
+// ── In-memory state ──
 let knownOutcomeIds: Set<number> = new Set();
 let isFirstPoll = true;
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Track outcomes where sentinel buy failed, with retry counts
+const failedBuys: Map<number, { attempts: number; mids: Record<string, string> }> = new Map();
+const MAX_BUY_RETRIES = 3;
 
 // ── Helpers ──
 
@@ -94,8 +96,7 @@ function parseDescription(description: string): {
 
 async function determineResult(
   outcomeId: number,
-  marketType: MarketType,
-  mids: AllMidsResponse
+  marketType: MarketType
 ): Promise<{ result: OutcomeResultValue; markPx: number | null }> {
   const coin = outcomeCoin(outcomeId);
 
@@ -129,40 +130,14 @@ async function determineResult(
     }
   } catch (err) {
     console.warn(
-      `[watcher] fills check failed for ${coin}, falling back to markPx:`,
+      `[watcher] fills check failed for ${coin}:`,
       (err as Error).message
     );
   }
 
-  // Fallback: use last known mid price
-  const midStr = mids[coin];
-  if (midStr) {
-    const mid = parseFloat(midStr);
-    if (marketType === "binary") {
-      return { result: mid >= 0.5 ? "YES" : "NO", markPx: mid };
-    }
-    return { result: mid >= 0.5 ? "WINNER" : "LOSER", markPx: mid };
-  }
-
-  // Fallback: check underlying asset price vs target from DB record
-  const dbRecord = await getOutcomeById(coin);
-  if (dbRecord?.underlying && dbRecord?.target) {
-    const underlyingMid = mids[dbRecord.underlying];
-    if (underlyingMid) {
-      const currentPrice = parseFloat(underlyingMid);
-      const won = currentPrice >= dbRecord.target;
-      const result: OutcomeResultValue = marketType === "binary"
-        ? (won ? "YES" : "NO")
-        : (won ? "WINNER" : "LOSER");
-      console.log(
-        `[watcher] ${coin} result from underlying: ${dbRecord.underlying}=$${currentPrice} vs target=$${dbRecord.target} → ${result}`
-      );
-      return { result, markPx: currentPrice };
-    }
-  }
-
-  // No data at all — outcome vanished without price info
-  console.warn(`[watcher] no price data for ${coin}, result unknown`);
+  // No sentinel fills — cannot determine result reliably.
+  // Poll-time prices are NOT settlement-time prices and can produce wrong results.
+  console.warn(`[watcher] no sentinel fills for ${coin}, result unknown — sentinel may not have a position`);
   return { result: null, markPx: null };
 }
 
@@ -175,12 +150,16 @@ export async function poll(): Promise<{
   const [meta, mids] = await Promise.all([fetchOutcomeMeta(), fetchAllMids()]);
 
   const currentIds = new Set(meta.outcomes.map((o) => o.outcome));
+  const previousKnownIds = new Set(knownOutcomeIds);
   let newCount = 0;
   let settledCount = 0;
 
+  // Update known set early so it's never stale even if later steps throw
+  knownOutcomeIds = currentIds;
+
   // ── 1. Detect NEW outcomes → insert into DB ──
   for (const o of meta.outcomes) {
-    if (!knownOutcomeIds.has(o.outcome)) {
+    if (!previousKnownIds.has(o.outcome)) {
       let { underlying, target } = parseNameParts(o.name);
       let expiry: Date | null = null;
 
@@ -213,28 +192,61 @@ export async function poll(): Promise<{
       console.log(`[watcher] new outcome: ${outcomeCoin(o.outcome)} "${o.name}" (${marketType})`);
 
       // Sentinel: buy 1 contract so we can read settlement fills later
-      buyForNewOutcome(o.outcome, mids).catch((err) => {
+      try {
+        const bought = await buyForNewOutcome(o.outcome, mids);
+        if (!bought) {
+          failedBuys.set(o.outcome, { attempts: 1, mids });
+        }
+      } catch (err) {
         console.error(`[watcher] sentinel buy failed for ${outcomeCoin(o.outcome)}:`, (err as Error).message);
-      });
+        failedBuys.set(o.outcome, { attempts: 1, mids });
+      }
+    }
+  }
+
+  // ── 1b. Retry failed sentinel buys ──
+  for (const [outcomeId, state] of failedBuys) {
+    if (!currentIds.has(outcomeId)) {
+      // Outcome already settled/gone, no point retrying
+      failedBuys.delete(outcomeId);
+      continue;
+    }
+    if (state.attempts >= MAX_BUY_RETRIES) {
+      console.warn(`[watcher] sentinel buy for ${outcomeCoin(outcomeId)} exhausted ${MAX_BUY_RETRIES} retries, giving up`);
+      failedBuys.delete(outcomeId);
+      continue;
+    }
+    try {
+      console.log(`[watcher] retrying sentinel buy for ${outcomeCoin(outcomeId)} (attempt ${state.attempts + 1}/${MAX_BUY_RETRIES})`);
+      const bought = await buyForNewOutcome(outcomeId, mids);
+      if (bought) {
+        console.log(`[watcher] sentinel retry succeeded for ${outcomeCoin(outcomeId)}`);
+        failedBuys.delete(outcomeId);
+      } else {
+        state.attempts++;
+      }
+    } catch (err) {
+      state.attempts++;
+      console.error(`[watcher] sentinel retry failed for ${outcomeCoin(outcomeId)}:`, (err as Error).message);
     }
   }
 
   // ── 2. Detect SETTLED outcomes (was known, now gone) ──
+  const dbActive = await getActiveOutcomes();
+
   if (!isFirstPoll) {
-    for (const id of knownOutcomeIds) {
+    for (const id of previousKnownIds) {
       if (!currentIds.has(id)) {
         const coin = outcomeCoin(id);
         const { marketType } = parseMarketType(id, meta.questions);
 
         // Also check DB for market type in case question info is gone too
-        const dbActive = await getActiveOutcomes();
         const dbRecord = dbActive.find((r) => r.id === coin);
         const effectiveType = dbRecord?.marketType ?? marketType;
 
         const { result, markPx } = await determineResult(
           id,
-          effectiveType,
-          mids
+          effectiveType
         );
 
         const rowsUpdated = await updateOutcome(coin, {
@@ -251,14 +263,12 @@ export async function poll(): Promise<{
     }
   } else {
     // First poll: also sync any outcomes in DB that are active but not in API
-    const dbActive = await getActiveOutcomes();
     for (const record of dbActive) {
       const numericId = parseInt(record.id.replace("@", ""), 10);
       if (!currentIds.has(numericId)) {
         const { result, markPx } = await determineResult(
           numericId,
-          record.marketType,
-          mids
+          record.marketType
         );
 
         const rowsUpdated = await updateOutcome(record.id, {
@@ -275,8 +285,7 @@ export async function poll(): Promise<{
     }
   }
 
-  // ── 3. Update known set for next cycle ──
-  knownOutcomeIds = currentIds;
+  // Known set already updated early (before step 1) to avoid staleness on errors
   isFirstPoll = false;
 
   return { newCount, settledCount };
@@ -294,19 +303,7 @@ export function startWatcher(): void {
     `[watcher] starting, poll interval: ${config.polling.intervalMs}ms`
   );
 
-  // Run first poll immediately
-  poll()
-    .then(({ newCount, settledCount }) => {
-      console.log(
-        `[watcher] initial poll: ${newCount} new, ${settledCount} settled`
-      );
-    })
-    .catch((err) => {
-      console.error("[watcher] initial poll failed:", err);
-    });
-
-  // Then poll on interval
-  pollTimer = setInterval(async () => {
+  async function schedulePoll(): Promise<void> {
     try {
       const { newCount, settledCount } = await poll();
       console.log(
@@ -315,13 +312,34 @@ export function startWatcher(): void {
     } catch (err) {
       console.error("[watcher] poll error:", err);
     }
-  }, config.polling.intervalMs);
+    // Schedule next poll only after current one finishes
+    if (pollTimer !== null) {
+      pollTimer = setTimeout(schedulePoll, config.polling.intervalMs);
+    }
+  }
+
+  // Run first poll immediately, then chain via setTimeout
+  pollTimer = setTimeout(schedulePoll, 0);
 }
 
 export function stopWatcher(): void {
-  if (pollTimer) {
-    clearInterval(pollTimer);
+  if (pollTimer !== null) {
+    clearTimeout(pollTimer);
     pollTimer = null;
     console.log("[watcher] stopped");
   }
 }
+
+// Exported for testing only
+export const _testExports = {
+  parseNameParts,
+  parseDescription,
+  parseMarketType,
+  determineResult,
+  outcomeCoin,
+  resetState() {
+    knownOutcomeIds = new Set();
+    isFirstPoll = true;
+    failedBuys.clear();
+  },
+};
