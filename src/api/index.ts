@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import { config } from "../config";
 import {
   getActiveOutcomes,
@@ -8,6 +9,7 @@ import {
 import { enrichOutcome, toBulkResultItem } from "./enrichment";
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
 // GET /oracle/active — enriched active outcomes (sentinel-filled only)
