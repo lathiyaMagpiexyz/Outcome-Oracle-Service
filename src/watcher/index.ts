@@ -194,7 +194,9 @@ export async function poll(): Promise<{
       // Sentinel: buy 1 contract so we can read settlement fills later
       try {
         const bought = await buyForNewOutcome(o.outcome, mids);
-        if (!bought) {
+        if (bought) {
+          await updateOutcome(outcomeCoin(o.outcome), { sentinelFilled: true });
+        } else {
           failedBuys.set(o.outcome, { attempts: 1, mids });
         }
       } catch (err) {
@@ -221,6 +223,7 @@ export async function poll(): Promise<{
       const bought = await buyForNewOutcome(outcomeId, mids);
       if (bought) {
         console.log(`[watcher] sentinel retry succeeded for ${outcomeCoin(outcomeId)}`);
+        await updateOutcome(outcomeCoin(outcomeId), { sentinelFilled: true });
         failedBuys.delete(outcomeId);
       } else {
         state.attempts++;
@@ -232,7 +235,7 @@ export async function poll(): Promise<{
   }
 
   // ── 2. Detect SETTLED outcomes (was known, now gone) ──
-  const dbActive = await getActiveOutcomes();
+  const dbActive = await getActiveOutcomes(false);
 
   if (!isFirstPoll) {
     for (const id of previousKnownIds) {

@@ -73,6 +73,15 @@ describe("poll — new outcome detection", () => {
     expect(result.newCount).toBe(2);
     expect(mockInsertOutcome).toHaveBeenCalledTimes(2);
     expect(mockBuyForNewOutcome).toHaveBeenCalledTimes(2);
+    // Should mark sentinel_filled=true after successful buy
+    expect(mockUpdateOutcome).toHaveBeenCalledWith(
+      "@100",
+      expect.objectContaining({ sentinelFilled: true })
+    );
+    expect(mockUpdateOutcome).toHaveBeenCalledWith(
+      "@101",
+      expect.objectContaining({ sentinelFilled: true })
+    );
   });
 
   it("does not re-insert known outcomes on subsequent polls", async () => {

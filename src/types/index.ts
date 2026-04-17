@@ -109,4 +109,28 @@ export interface OutcomeRecord {
   questionId: number | null;
   marketType: MarketType;
   rawMeta: Record<string, unknown>;
+  sentinelFilled: boolean;
+}
+
+// API response types
+
+export interface EnrichedOutcome {
+  id: string;
+  name: string;
+  underlying: string | null;
+  targetPrice: number | null;
+  expiry: Date | null;
+  isBTC: boolean;
+  isHYPE: boolean;
+  isCustom: boolean;
+  yesLabel: string;
+  noLabel: string;
+}
+
+export interface BulkResultItem {
+  id: string;
+  name: string;
+  settled: boolean;
+  yesWon: boolean | null;
+  noWon: boolean | null;
 }
