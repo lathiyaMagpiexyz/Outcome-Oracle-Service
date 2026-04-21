@@ -116,7 +116,7 @@ export async function updateOutcome(id: string, updates: OutcomeUpdate): Promise
  */
 export async function getActiveOutcomes(sentinelOnly = true): Promise<OutcomeRecord[]> {
   const where = sentinelOnly
-    ? 'WHERE result IS NULL AND sentinel_filled = TRUE'
+    ? 'WHERE result IS NULL AND sentinel_filled = TRUE AND expiry IS NOT NULL'
     : 'WHERE result IS NULL';
   const sql = `SELECT ${SELECT_COLUMNS} FROM outcomes ${where} ORDER BY start_time DESC`;
   const result = await query<OutcomeRow>(sql);
@@ -130,7 +130,7 @@ export async function getInactiveOutcomes(): Promise<OutcomeRecord[]> {
   const sql = `
     SELECT ${SELECT_COLUMNS}
     FROM outcomes
-    WHERE result IS NOT NULL AND sentinel_filled = TRUE
+    WHERE result IS NOT NULL AND sentinel_filled = TRUE AND expiry IS NOT NULL
     ORDER BY settled_at DESC
   `;
   const result = await query<OutcomeRow>(sql);
