@@ -6,7 +6,10 @@ import { fetchL2Book } from "../hyperliquid";
 
 // ── Constants ──
 
-const OUTCOME_ASSET_OFFSET = 10000; // outcome @N → asset index 10000 + N
+// Hyperliquid outcome asset index: 100_000_000 + 10*outcomeId + side (0=YES, 1=NO).
+// Ref: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/asset-ids
+const OUTCOME_ASSET_BASE = 100_000_000;
+const OUTCOME_SIDE_YES = 0;
 const MIN_ORDER_VALUE = 10; // Hyperliquid requires minimum $10 order value
 const SLIPPAGE = 0.05; // 5% above mid for IOC fill
 const SATURATED_HIGH = 0.98; // skip markets already settled-ish (binary capped at 1.0)
@@ -63,8 +66,8 @@ function floatToWire(x: number): string {
   return stripTrailingZeros(rounded.toFixed(6));
 }
 
-function outcomeToAssetIndex(outcomeId: number): number {
-  return OUTCOME_ASSET_OFFSET + outcomeId;
+function outcomeToAssetIndex(outcomeId: number, side: number = OUTCOME_SIDE_YES): number {
+  return OUTCOME_ASSET_BASE + 10 * outcomeId + side;
 }
 
 function outcomeCoin(outcomeId: number): string {
