@@ -2,12 +2,16 @@ import { ethers } from "ethers";
 import { encode } from "@msgpack/msgpack";
 import { config, getExchangeUrl } from "../config";
 import { QuestionMetaItem } from "../types";
+import { fetchL2Book } from "../hyperliquid";
 
 // ── Constants ──
 
 const OUTCOME_ASSET_OFFSET = 10000; // outcome @N → asset index 10000 + N
 const MIN_ORDER_VALUE = 10; // Hyperliquid requires minimum $10 order value
 const SLIPPAGE = 0.05; // 5% above mid for IOC fill
+const SATURATED_HIGH = 0.98; // skip markets already settled-ish (binary capped at 1.0)
+const SATURATED_LOW = 0.02;
+const DEFAULT_BINARY_PRICE = 0.5; // fallback when no mid and no book (testnet only)
 
 const PHANTOM_DOMAIN = {
   name: "Exchange",
@@ -153,24 +157,52 @@ async function postExchange(action: unknown): Promise<Record<string, unknown>> {
 
 // ── Order placement ──
 
+async function resolveBuyPrice(
+  coin: string,
+  mids: Record<string, string>
+): Promise<number | null> {
+  const midStr = mids[coin];
+  if (midStr) {
+    const midPx = parseFloat(midStr);
+    if (midPx > 0) {
+      // Skip saturated markets — binary outcomes are capped at 1.0, so mid * 1.05
+      // would be rejected. Also the market is near-settled, no point buying.
+      if (midPx >= SATURATED_HIGH || midPx <= SATURATED_LOW) {
+        console.warn(`[sentinel] ${coin} saturated (mid=${midPx}), skipping`);
+        return null;
+      }
+      return midPx;
+    }
+  }
+
+  // No mid → probe order book for a best ask
+  try {
+    const book = await fetchL2Book(coin);
+    const asks = book.levels?.[1] ?? [];
+    if (asks.length > 0) {
+      const bestAsk = parseFloat(asks[0].px);
+      if (bestAsk > 0 && bestAsk < 1.0) {
+        console.log(`[sentinel] ${coin} no mid, using best ask ${bestAsk}`);
+        return bestAsk;
+      }
+    }
+  } catch (err) {
+    console.warn(`[sentinel] l2Book fetch failed for ${coin}:`, (err as Error).message);
+  }
+
+  // Completely empty book → default price (testnet only fallback)
+  console.log(`[sentinel] ${coin} no mid or book, using default ${DEFAULT_BINARY_PRICE}`);
+  return DEFAULT_BINARY_PRICE;
+}
+
 async function buyOneContract(
   outcomeId: number,
   mids: Record<string, string>
 ): Promise<boolean> {
   const coin = outcomeCoin(outcomeId);
-  const midStr = mids[coin];
-
-  if (!midStr) {
-    console.warn(`[sentinel] no mid price for ${coin}, skipping buy`);
-    return false;
-  }
-
-  const midPx = parseFloat(midStr);
-  if (midPx <= 0) {
-    console.warn(`[sentinel] mid price for ${coin} is ${midPx}, skipping buy`);
-    return false;
-  }
-  const limitPx = midPx * (1 + SLIPPAGE);
+  const buyPx = await resolveBuyPrice(coin, mids);
+  if (buyPx === null) return false;
+  const limitPx = buyPx * (1 + SLIPPAGE);
 
   // Calculate size to meet minimum $10 order value, with buffer
   const minSize = Math.ceil((MIN_ORDER_VALUE * 1.5) / limitPx);

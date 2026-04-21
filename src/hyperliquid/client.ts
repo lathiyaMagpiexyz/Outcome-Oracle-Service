@@ -135,6 +135,22 @@ export function fetchUserState(user: string): Promise<UserStateResponse> {
   });
 }
 
+export interface L2BookLevel {
+  px: string;
+  sz: string;
+  n: number;
+}
+
+export interface L2BookResponse {
+  coin: string;
+  time: number;
+  levels: [L2BookLevel[], L2BookLevel[]];
+}
+
+export function fetchL2Book(coin: string): Promise<L2BookResponse> {
+  return postInfo<L2BookResponse>({ type: "l2Book", coin });
+}
+
 /**
  * Fetches fills for a user within a time range.
  * Used to check settlement fills on the sentinel wallet.
