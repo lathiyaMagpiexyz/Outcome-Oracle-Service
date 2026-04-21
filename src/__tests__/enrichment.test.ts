@@ -29,16 +29,39 @@ describe("enrichOutcome", () => {
     const result = enrichOutcome(makeRecord());
     expect(result).toEqual({
       id: "@100",
+      outcomeId: 100,
       name: "BTC > 84000",
+      displayName: "BTC > 84000",
+      question: "Will BTC be above $84,000 at expiry?",
       underlying: "BTC",
       targetPrice: 84000,
-      expiry: new Date("2026-04-16T08:00:00Z"),
+      expiry: "2026-04-16T08:00:00.000Z",
+      expiryTime: Math.floor(new Date("2026-04-16T08:00:00Z").getTime() / 1000),
+      period: null,
+      marketType: "binary",
       isBTC: true,
       isHYPE: false,
       isCustom: false,
       yesLabel: "Above",
       noLabel: "Below",
     });
+  });
+
+  it("parses period from rawMeta.description and builds displayName", () => {
+    const result = enrichOutcome(makeRecord({
+      rawMeta: { description: "class:priceBinary|underlying:BTC|expiry:20260414-0300|targetPrice:71238|period:1d" },
+    }));
+    expect(result.period).toBe("1d");
+    expect(result.displayName).toBe("BTC daily");
+  });
+
+  it("maps 15m period to 15min displayName", () => {
+    const result = enrichOutcome(makeRecord({
+      underlying: "HYPE",
+      rawMeta: { description: "period:15m" },
+    }));
+    expect(result.period).toBe("15m");
+    expect(result.displayName).toBe("HYPE 15min");
   });
 
   it("enriches HYPE outcome", () => {
@@ -98,11 +121,19 @@ describe("toBulkResultItem", () => {
     const result = toBulkResultItem(makeRecord({ result: null }));
     expect(result).toEqual({
       id: "@100",
+      outcomeId: 100,
       name: "BTC > 84000",
       settled: false,
       yesWon: null,
       noWon: null,
+      settledAt: null,
     });
+  });
+
+  it("serializes settledAt as ISO string when present", () => {
+    const settledAt = new Date("2026-04-17T12:00:00Z");
+    const result = toBulkResultItem(makeRecord({ result: "YES", settledAt }));
+    expect(result.settledAt).toBe("2026-04-17T12:00:00.000Z");
   });
 
   it("returns YES result as yesWon=true", () => {

@@ -116,10 +116,16 @@ export interface OutcomeRecord {
 
 export interface EnrichedOutcome {
   id: string;
+  outcomeId: number;
   name: string;
+  displayName: string;
+  question: string;
   underlying: string | null;
   targetPrice: number | null;
-  expiry: Date | null;
+  expiry: string | null;
+  expiryTime: number | null;
+  period: string | null;
+  marketType: MarketType;
   isBTC: boolean;
   isHYPE: boolean;
   isCustom: boolean;
@@ -129,8 +135,10 @@ export interface EnrichedOutcome {
 
 export interface BulkResultItem {
   id: string;
+  outcomeId: number;
   name: string;
   settled: boolean;
   yesWon: boolean | null;
   noWon: boolean | null;
+  settledAt: string | null;
 }

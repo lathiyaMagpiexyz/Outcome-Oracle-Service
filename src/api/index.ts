@@ -27,7 +27,11 @@ app.get("/oracle/active", async (_req, res) => {
 app.get("/oracle/inactive", async (_req, res) => {
   try {
     const outcomes = await getInactiveOutcomes();
-    res.json(outcomes.map(enrichOutcome));
+    res.json(outcomes.map((o) => ({
+      ...enrichOutcome(o),
+      result: o.result,
+      settledAt: o.settledAt ? o.settledAt.toISOString() : null,
+    })));
   } catch (err) {
     console.error("[api] /oracle/inactive error:", err);
     res.status(500).json({ error: "Internal server error" });
