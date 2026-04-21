@@ -8,6 +8,7 @@ const mockFetchUserFillsByTime = jest.fn();
 const mockInsertOutcome = jest.fn();
 const mockUpdateOutcome = jest.fn().mockResolvedValue(1);
 const mockGetActiveOutcomes = jest.fn().mockResolvedValue([]);
+const mockGetOutcomeById = jest.fn().mockResolvedValue(null);
 const mockBuyForNewOutcome = jest.fn().mockResolvedValue(true);
 
 jest.mock("../config", () => ({
@@ -26,6 +27,7 @@ jest.mock("../db/outcomeRepository", () => ({
   insertOutcome: (...args: unknown[]) => mockInsertOutcome(...args),
   updateOutcome: (...args: unknown[]) => mockUpdateOutcome(...args),
   getActiveOutcomes: (...args: unknown[]) => mockGetActiveOutcomes(...args),
+  getOutcomeById: (...args: unknown[]) => mockGetOutcomeById(...args),
 }));
 jest.mock("../sentinel", () => ({
   buyForNewOutcome: (...args: unknown[]) => mockBuyForNewOutcome(...args),
@@ -40,6 +42,7 @@ beforeEach(() => {
   mockInsertOutcome.mockResolvedValue(undefined);
   mockUpdateOutcome.mockResolvedValue(1);
   mockGetActiveOutcomes.mockResolvedValue([]);
+  mockGetOutcomeById.mockResolvedValue(null);
   mockBuyForNewOutcome.mockResolvedValue(true);
   mockFetchUserFillsByTime.mockResolvedValue([]);
 });

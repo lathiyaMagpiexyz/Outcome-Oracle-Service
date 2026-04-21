@@ -8,6 +8,7 @@ import {
   insertOutcome,
   updateOutcome,
   getActiveOutcomes,
+  getOutcomeById,
 } from "../db/outcomeRepository";
 import { buyForNewOutcome } from "../sentinel";
 import {
@@ -159,11 +160,17 @@ export async function poll(): Promise<{
 
   // ── 1. Detect NEW outcomes → insert into DB ──
   for (const o of meta.outcomes) {
-    if (!previousKnownIds.has(o.outcome)) {
+    if (previousKnownIds.has(o.outcome)) continue;
+
+    // Guard: skip if we already successfully bought this outcome in a prior run.
+    // Without this, every Railway restart re-buys every live outcome (drains funds).
+    const existing = await getOutcomeById(outcomeCoin(o.outcome));
+    if (existing?.sentinelFilled) continue;
+
+    if (!existing) {
       let { underlying, target } = parseNameParts(o.name);
       let expiry: Date | null = null;
 
-      // Recurring outcomes have details in the description
       if (o.name === "Recurring" && o.description) {
         const parsed = parseDescription(o.description);
         underlying = parsed.underlying ?? underlying;
@@ -190,19 +197,19 @@ export async function poll(): Promise<{
 
       newCount++;
       console.log(`[watcher] new outcome: ${outcomeCoin(o.outcome)} "${o.name}" (${marketType})`);
+    }
 
-      // Sentinel: buy 1 contract so we can read settlement fills later
-      try {
-        const bought = await buyForNewOutcome(o.outcome, mids);
-        if (bought) {
-          await updateOutcome(outcomeCoin(o.outcome), { sentinelFilled: true });
-        } else {
-          failedBuys.set(o.outcome, { attempts: 1, mids });
-        }
-      } catch (err) {
-        console.error(`[watcher] sentinel buy failed for ${outcomeCoin(o.outcome)}:`, (err as Error).message);
+    // Sentinel: buy 1 contract (for new outcomes or DB rows where prior buy failed)
+    try {
+      const bought = await buyForNewOutcome(o.outcome, mids);
+      if (bought) {
+        await updateOutcome(outcomeCoin(o.outcome), { sentinelFilled: true });
+      } else {
         failedBuys.set(o.outcome, { attempts: 1, mids });
       }
+    } catch (err) {
+      console.error(`[watcher] sentinel buy failed for ${outcomeCoin(o.outcome)}:`, (err as Error).message);
+      failedBuys.set(o.outcome, { attempts: 1, mids });
     }
   }
 
