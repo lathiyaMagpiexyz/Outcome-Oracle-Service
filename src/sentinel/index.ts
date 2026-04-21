@@ -14,7 +14,6 @@ const MIN_ORDER_VALUE = 10; // Hyperliquid requires minimum $10 order value
 const SLIPPAGE = 0.05; // 5% above mid for IOC fill
 const SATURATED_HIGH = 0.98; // skip markets already settled-ish (binary capped at 1.0)
 const SATURATED_LOW = 0.02;
-const DEFAULT_BINARY_PRICE = 0.5; // fallback when no mid and no book (testnet only)
 
 const PHANTOM_DOMAIN = {
   name: "Exchange",
@@ -193,9 +192,9 @@ async function resolveBuyPrice(
     console.warn(`[sentinel] l2Book fetch failed for ${coin}:`, (err as Error).message);
   }
 
-  // Completely empty book → default price (testnet only fallback)
-  console.log(`[sentinel] ${coin} no mid or book, using default ${DEFAULT_BINARY_PRICE}`);
-  return DEFAULT_BINARY_PRICE;
+  // No mid and no book → skip. Don't guess a price with real funds.
+  console.warn(`[sentinel] ${coin} no mid or book, skipping buy`);
+  return null;
 }
 
 async function buyOneContract(
