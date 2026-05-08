@@ -150,7 +150,9 @@ export async function poll(): Promise<{
 }> {
   const [meta, mids] = await Promise.all([fetchOutcomeMeta(), fetchAllMids()]);
 
-  const currentIds = new Set(meta.outcomes.map((o) => o.outcome));
+  // Only track Recurring priceBinary outcomes (skip custom, fallback, named)
+  const recurringOutcomes = meta.outcomes.filter((o) => o.name === "Recurring");
+  const currentIds = new Set(recurringOutcomes.map((o) => o.outcome));
   const previousKnownIds = new Set(knownOutcomeIds);
   let newCount = 0;
   let settledCount = 0;
@@ -159,7 +161,7 @@ export async function poll(): Promise<{
   knownOutcomeIds = currentIds;
 
   // ── 1. Detect NEW outcomes → insert into DB ──
-  for (const o of meta.outcomes) {
+  for (const o of recurringOutcomes) {
     if (previousKnownIds.has(o.outcome)) continue;
 
     // Guard: skip if we already successfully bought this outcome in a prior run.

@@ -51,8 +51,8 @@ function makeOutcomeMeta(ids: number[]) {
   return {
     outcomes: ids.map((id) => ({
       outcome: id,
-      name: `BTC > ${80000 + id}`,
-      description: "",
+      name: "Recurring",
+      description: `class:priceBinary|underlying:BTC|expiry:20260510-0300|targetPrice:${80000 + id}|period:1d`,
       sideSpecs: [],
     })),
     questions: [],
